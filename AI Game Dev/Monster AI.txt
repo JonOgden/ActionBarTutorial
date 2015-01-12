@@ -1,0 +1,218 @@
+
+     The Fourth Generation AI (4GAI) is intended to combine the efficient, easy-to-understand code of Angband 2.8.3, with the brains of the Keldon Jones AI, with a bunch of new cleverness and bugfixes.  It includes changes to four areas:  Monster ranged attack AI, combat distances, movement AI, and monster processing.  Bahman Rabii (BR) is primarily responsible for the first two, Leon Marrick (LM) the last two.  You will also recognize the work of Ben Harrison (BEN), David Reeve Sward (DRS), Keldon Jones (KJ), and others.
+
+     If interested in the code itself, consult the file "/code/codelist.txt" for a listing of changes.
+
+
+-------------------------------------------------------------------
+
+Table of Contents:
+     History
+     Description
+          Ranged Attack AI
+          Combat Distances
+          Movement AI
+          Monster Processing
+          Speed
+     Porting to other variants  (movement and processing sections mostly)
+     Issues and problems  (movement and processing sections only)
+
+
+-------------------------------------------------------------------
+
+History:  Standing on the shoulders of giants
+
+     The history of coding monster intelligence ("monster AI") in Moria and Angband is a long one.  You will not be reading the true history here; the following is one man's (i.e. LM's) opinion and viewpoint on previous AIs.  If you don't disagree with me at least once in the next six paragraphs, you need to learn more about this subject!
+
+
+The First Generation:
+
+     The first generation AI was mostly the work of Robert Koeneke.  Each turn, a monster would attempt to cast a spell, if it had any.  If it passed the spell frequency test, it would pick a spell at random.  Although a primitive method, choosing spells at random had the great advantage of keeping the monster true to character.  Not only was every spell guaranteed to be used, but monster designers could tweak the frequency of, say, harassment spells against attack spells by changing the number of each.
+     Monsters that didn't cast spells entered the movement code.  This involved choosing a direction that best approached the character, plus the two directions that flanked it on either side, for a total of five possible directions.  The monster would then try these five choices in order, testing any doors or glyphs, moving as soon as it found a grid it could enter or succeeded in clearing.  Again, to say that this was crude is less important than to note that, in the conditions of Moria, it worked acceptably.
+     The young Angband added many spells and new features, but made few changes to this basic system.  However, at or before version 2.6.2, intelligent monsters were made to cast better spells if desperate, and the first monster terror code appeared.
+
+The Second Generation:
+
+     When Ben Harrison took over, things started to change.  First came a massive code cleanup.  David Reeve Sward contributed the basic monster learning system we still use today; by storing information about character resists and immunities, monsters could learn to probe for missing resists - and then exploit them cruelly!  William Tanksley came up with a way for monsters to target the character, which allowed them to track their enemies down in a realistic, limited fashion.  Ben Harrison introduced the famous monster flow, which stored the route distance from the player up to a range of 32 every time the player moved.  Although extremely CPU-intensive, and criticized as giving monsters too much of an advantage over the player, the monster flow code made such a difference to monster intelligence as to become almost indispensable.  It eventually replaced the monster tracking code.  This, then, is the suite of features of the second generation of monster AIs, and the common possession of all modern Angbands.
+
+The Third Generation:
+
+     When the Keldon Jones AI came out, it caused a sensation.  Monsters stopped killing each other off with magic missiles, Zephyr Hounds starting luring the player into rooms, orcs started to surround the player, and monsters chose spells according to their tactical situation so cleverly that some of them became nearly unkillable.  It took a while, but eventually almost every major variant and Standard Angband adopted this code with greater or lesser modifications.  The best word on the Keldon Jones AI is that of Greg Wooledge, explaining why he included this code in his variant:  "I simply couldn't stand watching the novice rangers act like Keystone Kops any longer.".
+
+The Fourth Generation:
+
+     But the Keldon Jones AI was by no means perfect.  For starters, it was extremely slow.  In addition, this system made many monsters act out of character by discriminating against certain classes of spells or by making monsters suppress their most useful attack, and was difficult to fine-turn, either by the monster designer or the coder.  Because of this, Standard Angband, Angband/64, Drangband, Oangband, and Zangband all made significant improvements at one point or another.
+
+     In the minds of Bahman Rabii and Leon Marrick, the work appearing in Oangband (remember, that's short for Opinion-Angband) 0.5.1 and 0.5.2 is the first of these efforts to go decisively beyond the level of the third generation, and merit the title:
+
+"The Fourth Generation AI".
+
+
+-------------------------------------------------------------------
+
+The argument of deeds:  What this AI does that's different
+
+
+I.  Ranged attack code
+
+A.  Monster mana
+	The design process that led to the creation of 4GAI began with BR's desire to give monsters limited mana, adjustable in r_info.txt.  As he did so, he removed the one great barrier to further development of the Keldon Jones-enhanced AI - the fact that monsters with certain spells were becoming unkillable.
+	Monsters have a store of spellpoints, adjustable in r_info.txt.  Each spell has a cost, adjustable in tables.c (the exception to this being the heal spell, which requires special code).  Smart monsters know enough not to blow all their mana on one spell.
+
+	The implementation of monster mana displays three of the unifying themes of the whole of 4GAI:  
+1) new monster limitations coupled with new monster abilities => more game coolness.
+2) increased similarity in the capacities of monsters and the character, and - in some cases - even in their choices between possible options.
+3) powerful, relatively easy-to-understand tools available to the monster designer and even inexperienced coders.
+
+
+B.  New monster ranged attacks, new ranged attack power-determination
+	Ranged attacks are divided into four categories:  breaths, missiles, attack spells, and aid-self/hinder-foe spells.  As before, breaths use monster HPs and non-combat spells (mostly) use monster level.  The strength of missiles and attack spells, however, now relies on monster "spellpower", adjustable in r_info.txt.  This means that monsters can be given acid ball spells as weak as stinking clouds, or do as much damage as the designer likes with any form of attack.  It is hardly possible to express the extraordinary freedom posessed by a monster designer with the ability to tweak three different values for ranged attack strength.
+
+C.  Usage of monster memory
+	Usage of monster memory is no longer a matter of semi-randomly yanking spells out of a spell list, but of adjusting the "desirability" of each spell available to a monster.  Each spell has a specific LRN_* flag associated with it.  Whenever a monster considers casting that spell, the character's level of resistance is calculated, using the code handling the LRN_* flag.  This allows for more detailed analysis of varying player conditions (for example, the character's resistance to sound attacks depends on resist_sound, resist_confusion, and saving throw), more efficient processing, and far greater customizability.
+
+D:  Ranged attack-selection
+     Non-archery ranged attack selection consists of calculating the desirabilities of spells, randomizing them somewhat, and choosing the one with the greatest value.  Spell desirability depends on tactical situation, the vulnerability or otherwise of both the monster and the player, whether the character is projectable or not, and the intrinsic strength of the spell (whether it depends on monster level, HPs, or spellpower).  Distance from the character is also taken into account for those spells that have limited range or drop off in strength with range (breaths, for example).  A monster with multiple desires (kill character, hinder and reduce character, heal self, regain mana, escape, and so on) will take all of these needs into consideration, choosing spells according to both strength of need and effectiveness of spell.
+       Essentially, this code does everything the Keldon Jones code did plus a lot more, does it faster, and is a great deal more flexible.  In particular, its ability to consider the true strengths of competing attack spells, adjust those strengths according to character resistances, and consider mana usage is a lot like the choices characters make.  When combined with a spell list that gives more resistible spells greater strength before resistances, you will see monsters trying the fire storm spell first, then the nether storm, then the mana storm.  
+
+     At times, you will wonder if you aren't really playing MAngband.
+
+     Values adjusting the bonuses to spell desirability can be found in tables.c.  As blink-self is both a way to escape and a way to improve ones position, so it gets bonuses if the monster is interested in either.  Now, getting a monster to use a spell effectively involves little more than correctly filling out some tables.
+
+E.  Various enhancements
+     Monsters can cast (a few) spells when out of LOS.  The first time a Tengu leaps out of nowhere right in front of you will be quite a shock.
+     Monsters have a greatly expanded range of missile attacks; some can fire missiles almost every turn.
+
+
+
+
+II.  Combat distances
+     Monsters now store in memory the range from the character that they would ideally like to be at (best_range) and that which they really don't want to get any closer than (min_range).  These values take into account monster fear, monster terror (which eliminates virtually all the CPU cost of the old monster terror code), character and monster vulnerabilities, and monster ranged attack ability.  Best_range and min_range are used in the determination of spells, tests for monster fear, and various monster movement tests.  Combat distances are very much a work in progress, because the full development of the opportunities they allow is a grand project indeed.
+
+
+
+
+III.  Monster movement
+
+A.  Monster flow
+     The flow code has been rewritten.  The new system divides flow into two categories:  sound and scent.
+     Sound is the more important; its effects are similar to those of the Angband monster flow, except that it does not "linger" over time.  You either hear the bang or you don't.  Given the choice of using sound or scent, monsters will use sound first.  Monsters can use sound information to advance towards and retreat from the character.
+     Scent allows certain monsters to track down (but not run away from) the character by following his footsteps.  Canines and Zephyr Hounds are amazing trackers.  Not only will they hunt you down from halfway across the dungeon, they will howl out the bloodscent to each other so that all the pack can join in the chase.
+     Both sound and scent have wizard commands to debug them.
+
+     Monster flow has always been extremely computationally expensive.  Attempts have been made to reduce this burden by only updating flow when the character is out of LOS of the previous center; testing reveals that this simply doesn't work very well.
+     But a little ingenuity can fix this problem.  If the flow is extended outwards far enough, the character can be allowed to move for some distance before he gets close enough to the edge of the flow to require a rebuild.  In between times, all we need to do is update the grids /with the incorrect cost slopes/.  Doing this to perfection is non-trivial, but we can achieve a fairly close (and very fast) approximation.  Update whenever the character moves five or more grids or leaves LOS.  Flow outwards from the character's position, erasing and marking grids, until the previous update center is reached.  Rebuild the flow in the marked grids.
+
+B.  Monster targeting
+     As was the case long ago, monsters can use targeting information.  This saves a great deal of CPU time when monsters are retreating, lets advancing monsters remember where they last saw the character, may allow for semi-realistic "hunting" behavior if the monster is temporarily blinded, and makes it possible for monsters to give directions to each other.  There are many more possibilities that await exploitation.
+
+C.  Terrain-handling
+     Even in Angband, the inability of monsters to handle semi-traversable terrain (doors, for example) often causes problems.  In certain variants, Oangband pre-0.5.2 among them, this has become truly embarrassing.  4GAI offers the tools to solve many, but not all, of the problems associated with monster generation and movement in varied terrain.
+     The function "cave_exist_mon" handles all checks for the legality of monster existence in a given terrain.  Used in monster generation, it allows more flexible placement; you can get ghosts and Umber Hulks in walls, animals in trees, demons in lava, and water elementals in water.  Used in monster movement, it keeps creatures from wandering into illegal grids.
+     The function "cave_passable_mon" returns the chance for a specific monster to enter a given grid.  This means that calculating the true cost-time to go from one point to another is now possible.  Unfortunately, the flow code is still not terrain-friendly; those packs of hounds will still be found whining hopefully behind doors, waiting for them to open.  In short, you will find that monsters in LOS do fewer stupid things, but that monsters not in LOS will still occasionally get stuck.
+     Now that they know something about terrain, monsters are no longer allowed to cheat quite as much.  They cannot, for example, poke at up to five Glyphs of Warding until they find one that breaks.  Now they have to pick one glyph, and either break it or cancel their move.  Same applies to doors; monsters know enough about their neighborhood to tell a strong door from a weak one, but they can only bash one door in a turn.
+
+D.  Low-level movement code
+     It was once the case that monsters directly south of a character in LOS would always try to move north first (direction '8'), then northwest ('7'), then northeast ('9').  Now that same monster will check direction '8' first, and then use the current turn count to make a "spur of the moment" decision about whether to favor '7' or '9'.
+     Monsters still mostly push other monsters around by swapping with them.  However, if the moving monster occupies a grid that the second monster cannot exist in, it will push the second monster away if there are any open grids nearby.  This means that monsters trying to leave walls are no longer barred from moving; this really helps if your variant combines wall walking and pets.  Also, black orcs are no longer stopped by other black orcs, just slowed down by them.
+     Monsters with innate semi-random movement are always able to strike accurately at the character should they get the opportunity.  Just because a snake slithers around in funny patterns doesn't mean that it can't put its teeth where it wants to.  Monsters of this type are also fully capable of staying out of sight when necessary.
+     Monsters that are actually confused, however, move randomly just like the character and, like the character, will lose their turns if they try to enter a grid forbidden to them.  Upon occasion this will generate amusing messages and nasty effects.
+     The character is now always disturbed if a monster moves next to him.  This will eliminate some of the problems players have been having with not being given a chance to react if certain options are set.
+
+E.  Advancing monsters
+     Advancing monsters behave in ways that users of the Keldon Jones AI will recognize.  Animal packs will still swarm the character, but they do so using far less CPU time.  Also, they now understand how to advance while keeping out of sight; you will rarely be able to stand in a doorway and pick off hounds as they mill about.  Groups of monsters will still cluster around a character in open ground, but they know a lot more about terrain, and never get "free moves".
+
+F.  Retreating monsters
+     This code has been entirely rewritten.  Retreating monsters can - for the first time in the history of Angband - run around corners properly.  Now, more than ever, they are great at not being seen.  You will not see them futily trying to open a door that they can't, you will not see them ignoring an adjacent grid out of the line of fire, you will not see them trapped by their friends in the corridor, you will not see them wandering into the crosshairs unless they have a very good reason for doing so.  All too often, you will not see them at all.
+
+
+
+
+IV.  Monster Processing
+
+A.  Recovery
+     Monster recovery from temporary conditions has been totally rethought.  In Angband, if you confuse a Pink Naga and then teleport away, that monster will stay confused for all eternity unless you get close enough to it again.  If you stick around, the critter gets one chance to become unconfused each time it gets a turn; if you slowed it too, it will stay confused longer.  This is no longer the case.  Each and every monster on the level can recover from temporary conditions, and gets a chance to do so every ten game turns.
+- Stunned monsters are no longer paralyzed.  The character is almost never paralyzed through stunning, so monsters shouldn't be.  Just as happens to the character, monsters now hit and cast spells less often if stunned.  Monster level is now much less important in recovery from stunning and fear.
+- Monsters now eventually return to normal speed if hasted or slowed (I still can't believe that this was ever not true!)
+     HP recovery - and now mana recovery - is handled by the function that takes care of all the above.
+
+B.  Monster display
+     Multi-hued monsters now shimmer according to their breaths.  This made it possible to give Great Ice Wyrms the multi-hued attribute; they don't look like common Ancient Whites any more!  If your variant has Great Venom Wyrms, you can add the ATTR_MULTI flag to make them look really neat.  Sadly, this still doesn't work with graphics; what we need is to see graphics with areas of transparency, so that the scales of an Ancient Multihued can flicker beautifully.
+     Monsters with WEIRD_MIND again appear (pseudo) randomly, but without the expense of invoking the RNG.
+
+
+
+V.  Speed
+     The speed of the second generation AI has been recovered.  Oangband 0.5.2 is at least as fast as Angband 2.8.3 with both flow options ON.  It is markedly faster than Angband 2.9.2.  The biggest gains are in the flow code, in "process_monsters()", and in the monster terror and retreating code; these manage to offset the more liberal monster recovery rules and the more involved movement computations.  Spellcasting is also more efficient.  In short, replacing the Keldon Jones AI as implemented in any variant with this system will speed up the game noticeably, enough to give you lots of room to add more cool stuff!
+
+
+-------------------------------------------------------------------
+
+The "gotchas":  What this code depends on, what it assumes, and what might break if you aren't careful about porting it.
+
+
+Non-hackish rules to handle tough monsters:
+     Previously, two different monster flags ("nice" and "born") - each needing special updating code - were used to keep monsters from insta-killing the character.  Both have been removed.  FORCE_SLEEP monsters are now generated with no energy.  In addition, Oangband usually places stairs in hallway alcoves (see "generate.c").
+
+Spellcasting:
+     Monster spellpower is arguably the single most important advance in monster spells since Angband introduced special magic types and high resists, but it is also highly dangerous, as it allows you to code such nasty ranged attacks that players will curse the day you were born.  I gave Master Thieves the ARCHER flag, retained their 130 speed, and give them a spellpower that I thought wasn't at all out of line.  Result; they dealt damage at range like Morgoth!  You've been warned...
+
+Warnings about how terrain is handled:
+     A fair amount of time was spent making semi-traversable terrain (including doors) work in a relatively simple, non-hackish fashion, and in giving monsters a better navigation system.  However, try as I might, I could not find a way to get the flow code to cooperate in this effort - those monsters are still going to get "stuck" at doors sometimes.
+- the flow code assumes O-style (traversable) rubble.  This is easy to change.
+- the door bashing code assumes O-style HPs.  Most variants will want to make HPs worth about half of what they are here.  Strongly-barred doors are extremely difficult for low-level monsters to break down; it might be a good idea - actually, probably would be a good idea - to use depth as a factor when choosing the strength of doors.
+- no code is included to help monsters take advantage of good defensive terrain, find mana lines, etc.  If your variant has any of these things, you'll have to clue the monsters in yourself.
+
+Flow cost:
+     The noise portion of the monster flow code no longer marks cave grids with the exact route distance from the character.  This means that any code that requires exact numerical details of cost (as opposed to a simple cost comparison) will break.  This system replaces all such code for Angband and most variants.
+
+Monster flags:
+- The flags KILL_DOOR and MOVE_BODY should be extremely common, present on upwards of 2/3rd of all monsters and virtually all uniques.  Virtually any monster that comes in groups should have MOVE_BODY.  OPEN_DOOR should also be fairly common.
+
+Active versus passive:
+- There should be lines of code added in certain places to make monsters go active when necessary.  The most important function to update is "mon_take_hit()".
+
+Special variant-and-patch-specific warnings:
+- Porting to Zangbands past 2.4.0 or Angband/64 is going to be a *real nuisance*, because both have a very large amount of important code that is not duplicated here.
+- Porting to any variant with pets and friendly monsters will be a nuisance.
+- any special code related to multiplying monsters will need to be re-added.
+- no monster lights
+- monsters are still not able to attack over glyphs of warding.  It may have been a mistake not to change this.
+
+New methods for calculating stealth, noise, and smell:
+     This AI assumes a modified version of the traditional Oangband noise code, which calculates an intrinsic character noise level derived from stealth, and then adds transient noises from combat, bashing doors, and so on.  Both values determine how quickly monsters wake up.  For more details, look for the variables "p_ptr->base_wakeup_chance", "total_wakeup_chance", and "add_wakeup_chance" in the latest O source.
+
+     "r_ptr->freq_inate" and "r_ptr->freq_spell" have been combined, as the AI is capable of making any necessary adjustments to innate attack versus spell chance.  The new variable is called "r_ptr->freq_ranged".
+
+     Because monsters cannot test more than one glyph per turn,  the strength of glyphs should be reduced to 400 or so.  The number of glyphs on a level should probably also be limited; if they are not, consider reducing further.
+
+     Exp still determines whether one monster can kill another.  This is a bit of a hack.
+
+Monster temporary conditions:
+     The new code makes stunning monsters much less effective, sleeping slightly less effective, confusion much more effective, and both hasting and slowing noticeably less effective.  Spells and other code that subject monsters to these conditions should be adjusted accordingly.
+
+Compiler defines
+     The 4GAI does not use the compiler defines ALLOW_FEAR, ALLOW_TERROR, DRS_SMART_OPTIONS, WDT_TRACK_OPTIONS, and MONSTER_AI.  Either they are so basic as to be assumed (monster fear, drs_smart_options, monster_ai, and a rather different implementation of monster tracking), or have been made fast enough as to remove any need for a compiler define (monster terror), or are the whole point of this exercise (monster_ai).  Be sure to check all existing code that is set off by any of these compiler defines.
+
+     The compiler option MONSTER_FLOW should not be removed because this feature uses a significant quantity of memory (and some CPU time).  However, a note should be included strongly recommending that it not be undefined, unless ANGBAND_LITE is defined.
+
+     The compiler define MONSTER_FLOW_DEPTH should be moved to defines.h, along with the new flow variables, and set off by a test to MONSTER_FLOW.  It should be increased to 45.
+
+     Remove all references to "PU_UPDATE_FLOW" and "PU_FORGET_FLOW".  Both noise and smell information are updated only at very specific times.
+
+     There are various O-specific code chunks not mentioned above.  Because they're easy to find and easy to remove, it seems unnecessary to list the minor stuff.
+
+     See the file "/code/codelist.txt" for a file-by-file repeat of all this and more.
+
+
+-----------------------------------------------------------
+
+Some issues and problems outstanding:
+
+     If the player can see a monster (player_has_los_bold) and it can't see the player (player is not projectable), the monster should be able to make attacks of type ball/arc and of type breath at the projectable grid closest to the player.  This is easy to do.  Making it efficient too is a problem I haven't solved.
+
+     There is a big trade-off in the flow code.  I wanted to make noise flow out to a range that varies with total character noise.  I was unable to do this without either sacrificing the speed gains or using the cave_when array.  In the end, I wanted the optimization and the scent code more than I wanted a more realistic treatment of noise ranges.
+
+     Monster packs need more thought.  How to keep packs together?  How to improve the coordination of a pack?  One ambitious idea would be to have special pack arrays, with range and aggressiveness factors, pack leaders, etc.
+
+
